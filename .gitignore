@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output
-dist/
+# Build output (included in repo for git distribution)
+# dist/
 
 # Temporary files
 temp/
