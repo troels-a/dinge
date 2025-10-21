@@ -25,7 +25,7 @@ export const Item: React.FC<ItemProps> = ({ type, id, fallback, children }) => {
   
   useEffect(() => {
     const fetchItem = async () => {
-      if (!itemConfig.store || (item && shouldRefresh(item, itemConfig.ttl))) {
+      if (!itemConfig.store || !item || shouldRefresh(item, itemConfig.ttl)) {
         const currentItem = item || { data: null, clean: null, loading: false, error: null, timestamp: 0 };
         setItem(type, itemId, setItemLoading(currentItem, true));
         
