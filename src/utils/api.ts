@@ -5,7 +5,6 @@ export const parseConfig = (config: Record<string, any>): Record<string, any> =>
 
   for (const [type, itemConfig] of Object.entries(config)) {
     if (typeof itemConfig === 'string') {
-      // Simple string config - convert to full config
       parsed[type] = {
         store: true,
         ttl: undefined,
@@ -16,7 +15,6 @@ export const parseConfig = (config: Record<string, any>): Record<string, any> =>
         list: parseOperation(itemConfig, 'GET'),
       };
     } else {
-      // Object config
       parsed[type] = {
         store: itemConfig.store ?? true,
         ttl: itemConfig.ttl,
@@ -33,6 +31,14 @@ export const parseConfig = (config: Record<string, any>): Record<string, any> =>
 };
 
 const parseOperation = (config: any, defaultMethod: string): ParsedOperationConfig => {
+  if (!config) {
+    return {
+      endpoint: '',
+      method: defaultMethod,
+      handler: (res: Response) => res.json(),
+    };
+  }
+
   if (typeof config === 'string') {
     return {
       endpoint: config,
@@ -42,11 +48,12 @@ const parseOperation = (config: any, defaultMethod: string): ParsedOperationConf
   }
 
   return {
-    endpoint: config.endpoint,
+    endpoint: config.endpoint || '',
     method: config.method || defaultMethod,
     handler: config.handler || ((res: Response) => res.json()),
     headers: config.headers,
     transform: config.transform,
+    fetcher: config.fetcher,
   };
 };
 
@@ -55,6 +62,11 @@ export const makeRequest = async (
   id?: string,
   data?: any
 ): Promise<any> => {
+  // Use custom fetcher if provided — bypasses fetch entirely
+  if (operation.fetcher) {
+    return operation.fetcher(id, data);
+  }
+
   const url = id ? `${operation.endpoint}/${id}` : operation.endpoint;
 
   const requestData = operation.transform ? operation.transform(data) : data;
@@ -79,6 +91,11 @@ export const makeListRequest = async (
   operation: ParsedOperationConfig,
   params?: ListParams
 ): Promise<any> => {
+  // Use custom fetcher if provided — bypasses fetch entirely
+  if (operation.fetcher) {
+    return operation.fetcher(params);
+  }
+
   let url = operation.endpoint;
 
   if (params) {
