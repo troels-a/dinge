@@ -2,27 +2,21 @@
 
 Dinge (German for "things") is a CRUD-based framework for managing items in React apps. It works by providing a centralized context and store for item state management, with automatic caching and optimistic updates. The framework includes:
 
-- Provider framework with `useItem` hook for seamless data access
-- Store for efficient management of items with built-in caching
+- Provider framework with `useItem` and `useList` hooks for seamless data access
+- Store for efficient management of items and lists with built-in caching
 - Extendable config supporting multiple API patterns
+- Custom `fetcher` support for non-REST data sources (Supabase, GraphQL, etc.)
 
 ## Installation
 
 ```bash
-# Install from git (for now)
-npm install git+https://github.com/yourusername/dinge.git
-# or
-yarn add git+https://github.com/yourusername/dinge.git
-
-# When published to npm:
-# npm install dinge
-# yarn add dinge
+npm install troels-a/dinge
 ```
 
 ## Quick Start
 
 ```jsx
-import { ItemProvider, Item, useItem, useItemContext } from 'dinge';
+import { ItemProvider, Item, List, useItem, useList, useItemContext } from 'dinge';
 
 const config = {
   book: '/api/books',
@@ -32,11 +26,13 @@ const config = {
 function App() {
   return (
     <ItemProvider config={config}>
+      <BookList />
       <BookDetail id="123" />
     </ItemProvider>
   );
 }
 
+// Single item
 function BookDetail({ id }) {
   return (
     <Item type="book" id={id}>
@@ -61,6 +57,26 @@ function BookContent() {
     </div>
   );
 }
+
+// List of items
+function BookList() {
+  return (
+    <List type="book" params={{ page: 1, per_page: 20 }}>
+      <BookGrid />
+    </List>
+  );
+}
+
+function BookGrid() {
+  const { items, loading, refresh } = useList();
+  if (loading) return <div>Loading...</div>;
+  return (
+    <div>
+      {items.map(book => <div key={book.id}>{book.title}</div>)}
+      <button onClick={() => refresh()}>Refresh</button>
+    </div>
+  );
+}
 ```
 
 ## Configuration
@@ -82,6 +98,7 @@ const config = {
 - **Read:** `GET /api/books/:id`
 - **Update:** `PUT /api/books/:id`
 - **Delete:** `DELETE /api/books/:id`
+- **List:** `GET /api/books` (with params appended as query string)
 - Response data is used as-is from the JSON body
 - **Store:** Enabled by default (`store: true`)
 - **TTL:** No expiration (`ttl: undefined`)
@@ -110,6 +127,10 @@ const config = {
     delete: {
       endpoint: '/api/books',
       handler: res => res.ok ? { deleted: true } : { deleted: false }
+    },
+    list: {
+      endpoint: '/api/books',
+      handler: res => res.json().then(data => data.books)
     }
   }
 };
@@ -123,14 +144,15 @@ const config = {
 
 **Operation Config:**
 
-Each operation (`create`, `read`, `update`, `delete`) can be:
+Each operation (`create`, `read`, `update`, `delete`, `list`) can be:
 - A **string** (endpoint URL) - uses default HTTP method and response handling
 - An **object** with the following properties:
-  - `endpoint` (string, required): API endpoint URL
-  - `method` (string, optional): HTTP method (defaults: POST for create, GET for read, PUT for update, DELETE for delete)
+  - `endpoint` (string, optional): API endpoint URL
+  - `method` (string, optional): HTTP method (defaults: POST for create, GET for read/list, PUT for update, DELETE for delete)
   - `handler` (function, optional): Custom response handler `(response) => data`
   - `headers` (object, optional): Additional HTTP headers
   - `transform` (function, optional): Transform request data before sending `(data) => transformedData`
+  - `fetcher` (function, optional): Custom async function that replaces the entire fetch call. When provided, all other fields are ignored. See the Custom Fetchers section below.
 
 ### Mixed Configuration Styles
 
@@ -166,6 +188,46 @@ const config = {
 };
 ```
 
+### Custom Fetchers
+
+For non-REST data sources (Supabase, GraphQL, custom SDKs), use `fetcher` to completely replace the built-in fetch call. The fetcher receives the id (for read/update/delete), params (for list), or data (for create/update) and returns data directly — no `Response` wrapping needed.
+
+```jsx
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(url, key);
+
+const config = {
+  photo: {
+    read: {
+      fetcher: async (id) => {
+        const { data } = await supabase.from('photos').select('*').eq('id', id).single();
+        return data;
+      }
+    },
+    list: {
+      fetcher: async (params) => {
+        const { data } = await supabase.from('photos').select('*').order('created_at');
+        return data; // Return array or { items: [...], total: N }
+      }
+    },
+    update: {
+      fetcher: async (id, updates) => {
+        const { data } = await supabase.from('photos').update(updates).eq('id', id).select().single();
+        return data;
+      }
+    },
+    delete: {
+      fetcher: async (id) => {
+        await supabase.from('photos').delete().eq('id', id);
+      }
+    }
+  }
+};
+```
+
+When `fetcher` is provided, `endpoint`, `method`, `handler`, and `headers` are ignored — the fetcher is the entire request.
+
 ## Store Behavior
 
 When `store: true` (default), ItemProvider automatically:
@@ -178,6 +240,8 @@ When `store: true` (default), ItemProvider automatically:
    - After `delete`: Item is removed from store
 4. **Serves cached data** on subsequent reads (if within TTL when set)
 5. **Shares state** across all components using the same item
+6. **Caches list results** by type + serialized params
+7. **Cross-populates the item store**: items returned from `<List>` are individually cached in the item store, so subsequent `<Item type="..." id="...">` lookups use the cached data
 
 ### Clean State & Automatic Rollback
 
@@ -211,6 +275,15 @@ Wrapper component that loads and provides item data to children.
 - `id` (string|number, required): Unique identifier for the item
 - `fallback` (ReactNode, optional): Loading fallback component
 
+### `<List>`
+
+Wrapper component that loads and provides list data to children. Items from the list response are individually cached in the item store.
+
+**Props:**
+- `type` (string, required): Item type as defined in config
+- `params` (object, optional): Query parameters — passed as URL search params for REST endpoints, or as the first argument to a custom `fetcher`
+- `fallback` (ReactNode, optional): Loading fallback component
+
 ### `useItem()`
 
 Hook to access item data and operations within an `<Item>` component.
@@ -232,6 +305,21 @@ Hook to access item data and operations within an `<Item>` component.
   
   // Direct store manipulation
   mutate: (updater: (prev: Data) => Data) => void;   // Update item in store only
+}
+```
+
+### `useList()`
+
+Hook to access list data and operations within a `<List>` component.
+
+**Returns:**
+```typescript
+{
+  items: T[];             // Array of items
+  ids: string[];          // Array of item IDs (from items that have id/_id)
+  loading: boolean;       // Loading state
+  error: Error | null;    // Error object if request failed
+  refresh: (params?: ListParams) => Promise<T[]>;  // Refetch list (optionally with new params)
 }
 ```
 
@@ -274,6 +362,38 @@ await update({ title: 'New Title' }, { rollback: true });
 When `rollback: true` is set, the state automatically reverts to the last clean version if the API call fails.
 
 ## Examples
+
+### Fetching a List
+
+```jsx
+function RecentBooks() {
+  return (
+    <List type="book" params={{ sort: 'created_at', order: 'desc', limit: 10 }}>
+      <BookGrid />
+    </List>
+  );
+}
+
+function BookGrid() {
+  const { items, loading, error, refresh } = useList();
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      {items.map(book => (
+        <Item key={book.id} type="book" id={book.id}>
+          <BookCard />
+        </Item>
+      ))}
+      <button onClick={() => refresh()}>Refresh</button>
+    </div>
+  );
+}
+```
+
+Items from the list are individually cached, so wrapping them in `<Item>` uses the cached data without re-fetching.
 
 ### Creating a New Item
 
