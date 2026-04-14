@@ -5,6 +5,7 @@ export type ItemConfig = {
   read?: OperationConfig | string;
   update?: OperationConfig | string;
   delete?: OperationConfig | string;
+  list?: OperationConfig | string;
 };
 
 export type OperationConfig = {
@@ -29,11 +30,22 @@ export type ItemState<T = any> = {
   timestamp: number;
 };
 
+export type ListState<T = any> = {
+  ids: string[];
+  data: T[];
+  loading: boolean;
+  error: Error | null;
+  timestamp: number;
+};
+
 export type StoreState = {
   items: {
     [type: string]: {
       [id: string]: ItemState;
     };
+  };
+  lists: {
+    [key: string]: ListState;
   };
 };
 
@@ -42,6 +54,9 @@ export type StoreActions = {
   getItem: <T>(type: string, id: string) => ItemState<T> | undefined;
   removeItem: (type: string, id: string) => void;
   clearItems: (type?: string) => void;
+  setList: <T>(key: string, list: Partial<ListState<T>>) => void;
+  getList: <T>(key: string) => ListState<T> | undefined;
+  removeList: (key: string) => void;
 };
 
 export type ParsedConfig = {
@@ -52,6 +67,7 @@ export type ParsedConfig = {
     read: ParsedOperationConfig;
     update: ParsedOperationConfig;
     delete: ParsedOperationConfig;
+    list: ParsedOperationConfig;
   };
 };
 
@@ -62,3 +78,5 @@ export type ParsedOperationConfig = {
   headers?: Record<string, string>;
   transform?: (data: any) => any;
 };
+
+export type ListParams = Record<string, string | number | boolean | undefined>;
