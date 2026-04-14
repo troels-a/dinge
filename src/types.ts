@@ -9,11 +9,12 @@ export type ItemConfig = {
 };
 
 export type OperationConfig = {
-  endpoint: string;
+  endpoint?: string;
   method?: string;
   handler?: (response: Response) => Promise<any>;
   headers?: Record<string, string>;
   transform?: (data: any) => any;
+  fetcher?: (idOrParams?: any, data?: any) => Promise<any>;
 };
 
 export type Config = Record<string, ItemConfig | string>;
@@ -77,6 +78,7 @@ export type ParsedOperationConfig = {
   handler: (response: Response) => Promise<any>;
   headers?: Record<string, string>;
   transform?: (data: any) => any;
+  fetcher?: (idOrParams?: any, data?: any) => Promise<any>;
 };
 
 export type ListParams = Record<string, string | number | boolean | undefined>;
