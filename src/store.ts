@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import { StoreState, StoreActions, ItemState } from './types';
+import { StoreState, StoreActions, ItemState, ListState } from './types';
 
 export const useStore = create<StoreState & StoreActions>((set, get) => ({
   items: {},
+  lists: {},
 
   setItem: <T>(type: string, id: string, item: Partial<ItemState<T>>) => {
     set((state) => ({
@@ -42,6 +43,29 @@ export const useStore = create<StoreState & StoreActions>((set, get) => ({
         return { items: newItems };
       }
       return { items: {} };
+    });
+  },
+
+  setList: <T>(key: string, list: Partial<ListState<T>>) => {
+    set((state) => ({
+      lists: {
+        ...state.lists,
+        [key]: {
+          ...state.lists[key],
+          ...list,
+        } as ListState<T>,
+      },
+    }));
+  },
+
+  getList: <T>(key: string): ListState<T> | undefined => {
+    return get().lists[key] as ListState<T> | undefined;
+  },
+
+  removeList: (key: string) => {
+    set((state) => {
+      const { [key]: removed, ...rest } = state.lists;
+      return { lists: rest };
     });
   },
 }));
